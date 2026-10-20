@@ -1,0 +1,1074 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>말랑말랑 우리동네 청소 대작전!</title>
+    <style>
+        /* 기본 레이아웃 리셋 및 터치 방지 */
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            margin: 0;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body, html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #f0fdf4;
+            font-family: 'Nanum Gothic', 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
+        }
+
+        /* 메인 게임 컨테이너: 기본 우리동네 실사 이미지 배경 적용 */
+        #game-board {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            max-width: 1200px;
+            max-height: 800px;
+            margin: 0 auto;
+            background-image: url('8763e97e-d8fe-4bb4-b730-34e3b184526d.png');
+            background-size: cover;
+            background-position: center;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+            border-radius: 0;
+            overflow: hidden;
+        }
+
+        /* 데스크톱 모드 지원 */
+        @media (min-width: 1200px) {
+            body {
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                background-color: #dcfce7;
+            }
+            #game-board {
+                border-radius: 24px;
+                height: 95vh;
+            }
+        }
+
+        /* 상단 타이머, 점수판 및 배경음악 컨트롤 */
+        #top-bar {
+            position: absolute;
+            top: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 15px;
+            z-index: 10;
+        }
+
+        .status-card {
+            background: rgba(255, 255, 255, 0.95);
+            border: 4px solid #bbf7d0;
+            border-radius: 24px;
+            padding: 8px 18px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+            font-size: 16px;
+            font-weight: 900;
+            color: #166534;
+            pointer-events: none;
+        }
+
+        .status-card.timer {
+            border-color: #fecdd3;
+            color: #9f1239;
+        }
+
+        /* 배경음악 토글 가능한 전용 카드 */
+        .status-card.bgm-toggle {
+            border-color: #bfdbfe;
+            color: #1d4ed8;
+            cursor: pointer;
+            pointer-events: auto; /* 터치 활성화 */
+            transition: transform 0.2s, background-color 0.2s;
+        }
+
+        .status-card.bgm-toggle:active {
+            transform: scale(0.95);
+            background-color: #eff6ff;
+        }
+
+        .status-card span {
+            font-size: 24px;
+            font-family: 'Arial Rounded MT Bold', sans-serif;
+        }
+
+        /* 파스텔톤 쓰레기통 공간 */
+        #trash-can-container {
+            position: absolute;
+            bottom: 30px;
+            right: 30px;
+            z-index: 5;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            pointer-events: none;
+        }
+
+        .trash-can-label {
+            background-color: #db2777;
+            color: white;
+            font-weight: bold;
+            padding: 5px 16px;
+            border-radius: 12px;
+            font-size: 15px;
+            margin-bottom: -6px;
+            z-index: 6;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15);
+            border: 2px solid white;
+        }
+
+        .trash-can-svg {
+            filter: drop-shadow(0 12px 20px rgba(0, 0, 0, 0.25));
+            transition: transform 0.2s ease;
+            width: 140px;
+            height: 180px;
+        }
+
+        .trash-can-bounce {
+            transform: scale(1.18);
+        }
+
+        /* 쓰레기 공통 스타일 */
+        .trash-item {
+            position: absolute;
+            cursor: pointer;
+            z-index: 8;
+            transition: transform 0.1s ease;
+            filter: drop-shadow(0 6px 8px rgba(0, 0, 0, 0.15));
+            touch-action: none;
+            width: 80px;
+            height: 80px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .trash-item:active {
+            transform: scale(1.2);
+        }
+
+        /* 골인 애니메이션 */
+        .trash-item.flying {
+            pointer-events: none;
+            transition: all 0.6s cubic-bezier(0.25, 1, 0.5, 1);
+            left: var(--target-x) !important;
+            top: var(--target-y) !important;
+            transform: scale(0.1) rotate(720deg) !important;
+            opacity: 0;
+        }
+
+        /* 모달 팝업 공통 스타일 */
+        .game-modal {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(15, 23, 42, 0.65);
+            backdrop-filter: blur(4px);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            transition: opacity 0.3s ease, visibility 0.3s ease;
+        }
+
+        .modal-content {
+            background: white;
+            border: 8px solid #fbcfe8;
+            border-radius: 36px;
+            padding: 24px 24px;
+            width: 95%;
+            max-width: 460px;
+            text-align: center;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2);
+            animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            transition: transform 0.3s ease;
+        }
+
+        @keyframes popIn {
+            0% { transform: scale(0.8); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .modal-title {
+            font-size: 26px;
+            font-weight: 900;
+            color: #db2777;
+            margin-bottom: 8px;
+            line-height: 1.3;
+        }
+
+        .modal-desc {
+            font-size: 14px;
+            color: #4b5563;
+            margin-bottom: 16px;
+            line-height: 1.5;
+            word-break: keep-all;
+        }
+
+        /* 📸 이미지 파일 업로드 카드 디자인 */
+        .upload-card {
+            background-color: #fff1f2;
+            border: 3px dashed #fda4af;
+            border-radius: 24px;
+            padding: 14px;
+            margin-bottom: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .upload-info {
+            font-size: 13px;
+            font-weight: bold;
+            color: #be123c;
+            line-height: 1.4;
+        }
+
+        /* 시작 전에 들어갈 배경 이미지 실시간 미리보기 프레임 */
+        .bg-preview-frame {
+            width: 100%;
+            height: 110px;
+            border: 3px solid white;
+            outline: 2px solid #fda4af;
+            border-radius: 16px;
+            background-size: cover;
+            background-position: center;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            transition: background-image 0.2s ease;
+        }
+
+        /* 버튼 컨테이너 (업로드 & 크게 보기 가로 배치) */
+        .btn-group {
+            display: flex;
+            gap: 8px;
+            width: 100%;
+            justify-content: center;
+        }
+
+        .file-selector-btn {
+            position: relative;
+            background-color: #f43f5e;
+            color: white;
+            border: none;
+            border-radius: 50px;
+            padding: 10px 18px;
+            font-size: 13px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(244, 63, 94, 0.2);
+            transition: all 0.2s ease;
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+        }
+
+        .file-selector-btn:hover {
+            background-color: #e11d48;
+        }
+
+        .file-selector-btn input[type=file] {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            cursor: pointer;
+        }
+
+        /* 풍경 크게 보기 버튼 */
+        .view-scenery-btn {
+            background-color: #be185d;
+            color: white;
+            border: none;
+            border-radius: 50px;
+            padding: 10px 18px;
+            font-size: 13px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(190, 24, 93, 0.2);
+            transition: all 0.2s ease;
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+        }
+
+        .view-scenery-btn:hover {
+            background-color: #9d174d;
+        }
+
+        /* 분리형 하단 시작 버튼 */
+        .start-btn {
+            background: linear-gradient(135deg, #4ade80, #16a34a);
+            color: white;
+            border: none;
+            border-radius: 50px;
+            padding: 14px 40px;
+            font-size: 22px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 8px 15px rgba(22, 163, 74, 0.3);
+            transition: all 0.2s ease;
+            width: 100%;
+        }
+
+        .start-btn:active {
+            transform: scale(0.95);
+        }
+
+        /* 풍경 감상 힌트 말풍선 */
+        #view-bg-hint {
+            position: absolute;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(15, 23, 42, 0.85);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 50px;
+            font-size: 14px;
+            font-weight: bold;
+            z-index: 200;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+            text-align: center;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+        }
+
+        /* 투명 감상 스크린 커버 (풍경 보기 활성화 시 클릭 복귀용) */
+        #view-bg-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 190;
+            cursor: pointer;
+            display: none;
+        }
+
+        .hidden {
+            display: none !important;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        /* 투명도로 사라지는 효과 */
+        .fade-out {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+
+        /* 랜덤 회전 각도 */
+        .rot-1 { transform: rotate(15deg); }
+        .rot-2 { transform: rotate(-15deg); }
+        .rot-3 { transform: rotate(25deg); }
+        .rot-4 { transform: rotate(-25deg); }
+    </style>
+</head>
+<body>
+
+    <div id="game-board">
+        <!-- 대시보드 -->
+        <div id="top-bar">
+            <div class="status-card timer">
+                ⏱️ 시간: <span id="time-left">20</span>초
+            </div>
+            <div class="status-card">
+                ⭐ 점수: <span id="score-val">0</span> / 10
+            </div>
+            <!-- 배경음악 ON/OFF 토글 전용 카드 -->
+            <div class="status-card bgm-toggle" onclick="toggleBgm()">
+                <span id="bgm-icon">🎵 ON</span>
+            </div>
+        </div>
+
+        <!-- 쓰레기 생성 공간 -->
+        <div id="trash-container"></div>
+
+        <!-- 파스텔 핑크 쓰레기통 -->
+        <div id="trash-can-container">
+            <div class="trash-can-label">쓰레기통</div>
+            <svg class="trash-can-svg" id="trash-can" viewBox="0 0 140 180" width="140" height="180">
+                <defs>
+                    <!-- 몸통 입체 그라데이션 -->
+                    <linearGradient id="binBodyGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" stop-color="#be185d"/>
+                        <stop offset="25%" stop-color="#f472b6"/>
+                        <stop offset="60%" stop-color="#fbcfe8"/>
+                        <stop offset="85%" stop-color="#f472b6"/>
+                        <stop offset="100%" stop-color="#9d174d"/>
+                    </linearGradient>
+                    <!-- 뚜껑용 반짝임 그라데이션 -->
+                    <linearGradient id="lidGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" stop-color="#f472b6"/>
+                        <stop offset="50%" stop-color="#fbcfe8"/>
+                        <stop offset="100%" stop-color="#db2777"/>
+                    </linearGradient>
+                    <!-- 버킷 입구 테두리 링 -->
+                    <linearGradient id="rimGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" stop-color="#fbcfe8"/>
+                        <stop offset="100%" stop-color="#be185d"/>
+                    </linearGradient>
+                    <!-- 현실적인 바닥 그림자 -->
+                    <radialGradient id="canShadow" cx="50%" cy="50%" r="50%">
+                        <stop offset="0%" stop-color="rgba(15, 23, 42, 0.45)"/>
+                        <stop offset="100%" stop-color="rgba(15, 23, 42, 0)"/>
+                    </radialGradient>
+                </defs>
+
+                <!-- 바닥 접지면 그림자 -->
+                <ellipse cx="70" cy="170" rx="55" ry="8" fill="url(#canShadow)"/>
+
+                <!-- 쓰레기통 몸통 (원통형 플라스틱 버킷 바디) -->
+                <path d="M 22,40 L 32,158 Q 34,166 45,166 L 95,166 Q 106,166 108,158 L 118,40 Z" fill="url(#binBodyGrad)" stroke="#9d174d" stroke-width="2.5" stroke-linejoin="round"/>
+
+                <!-- 입체 플라스틱 느낌을 더하는 바디 릿지(가로선) 디테일 -->
+                <path d="M 25,65 Q 70,75 115,65" fill="none" stroke="#be185d" stroke-width="2" opacity="0.4"/>
+                <path d="M 28,105 Q 70,115 112,105" fill="none" stroke="#be185d" stroke-width="2" opacity="0.4"/>
+                <path d="M 30,135 Q 70,143 110,135" fill="none" stroke="#be185d" stroke-width="2" opacity="0.4"/>
+
+                <!-- 입체 반사광을 위한 패널 음영 라인 -->
+                <path d="M 35,52 L 42,150 Q 43,154 50,154 L 90,154 Q 97,154 98,150 L 105,52 Z" fill="#ffffff" opacity="0.15"/>
+
+                <!-- 쓰레기통 입구 고리형 프레임 테두리 -->
+                <ellipse cx="70" cy="40" rx="48" ry="12" fill="url(#rimGrad)" stroke="#9d174d" stroke-width="2"/>
+                <ellipse cx="70" cy="40" rx="42" ry="9" fill="#4d052d" />
+
+                <!-- 현실적인 덮개식 리드(Lid) 및 힌지 고정 손잡이 디자인 -->
+                <path d="M 18,36 C 18,22 122,22 122,36 C 122,44 18,44 18,36 Z" fill="url(#lidGrad)" stroke="#9d174d" stroke-width="1.5" opacity="0.98"/>
+                <!-- 뚜껑 중앙의 음각 손잡이 바 -->
+                <rect x="50" y="16" width="40" height="11" rx="4" fill="#9d174d" stroke="#fbcfe8" stroke-width="1.5"/>
+                <rect x="56" y="20" width="28" height="3" rx="1" fill="#fbcfe8" opacity="0.9"/>
+            </svg>
+        </div>
+
+        <!-- 시작 모달 (시작 전에 사진 삽입 구역 및 독립된 게임시작 버튼 분리) -->
+        <div id="start-modal" class="game-modal">
+            <div class="modal-content">
+                <div class="modal-title">반짝반짝 우리동네<br>청소 대작전! ✨</div>
+                <div class="modal-desc">
+                    20초 동안 우리동네 쓰레기 10개를 모두 주워서 파스텔 쓰레기통에 넣어주세요!
+                </div>
+                
+                <!-- 📸 수동 이미지 파일 업로드 박스 -->
+                <div class="upload-card">
+                    <div class="upload-info">
+                        배경에 넣을 우리동네 사진을 직접 삽입해 주세요!
+                    </div>
+                    <!-- 현재 지정된 배경 이미지 실시간 미리보기 상자 -->
+                    <div id="modal-bg-preview-start" class="bg-preview-frame" style="background-image: url('8763e97e-d8fe-4bb4-b730-34e3b184526d.png');"></div>
+                    
+                    <div class="btn-group">
+                        <button class="file-selector-btn">
+                            사진 바꾸기 📁
+                            <input type="file" id="bg-uploader" accept="image/*" onchange="handleBackgroundUpload(event)">
+                        </button>
+                        <!-- 풍경 크게보기 버튼 -->
+                        <button class="view-scenery-btn" onclick="hideMenuToViewScenery('start-modal')">
+                            풍경 보기 👁️
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 분리형 하단 시작 버튼 -->
+                <button class="start-btn" onclick="initAndStartGame()">게임 시작! 🚀</button>
+            </div>
+        </div>
+
+        <!-- 게임 완료 모달 (종료 후에도 풍경 감상 및 배경 사진 선택 가능) -->
+        <div id="end-modal" class="game-modal hidden">
+            <div class="modal-content">
+                <div class="modal-title" id="end-title">성공! 🎉</div>
+                <div class="modal-desc" id="end-desc">우리동네가 정말 깨끗해졌어요! 고마워요!</div>
+                
+                <!-- 📸 게임 종료 후 활성화되는 배경 업로드 메뉴 -->
+                <div class="upload-card">
+                    <div class="upload-info">
+                        다음 게임을 위해 배경 사진을 교체해 볼까요?
+                    </div>
+                    <!-- 완료 모달 속 미리보기 상자 -->
+                    <div id="modal-bg-preview-end" class="bg-preview-frame" style="background-image: url('8763e97e-d8fe-4bb4-b730-34e3b184526d.png');"></div>
+                    
+                    <div class="btn-group">
+                        <button class="file-selector-btn">
+                            사진 바꾸기 📁
+                            <input type="file" id="bg-uploader-end" accept="image/*" onchange="handleBackgroundUpload(event)">
+                        </button>
+                        <button class="view-scenery-btn" onclick="hideMenuToViewScenery('end-modal')">
+                            풍경 보기 👁️
+                        </button>
+                    </div>
+                </div>
+
+                <button class="start-btn" onclick="initAndStartGame()">다시 도전하기 🔄</button>
+            </div>
+        </div>
+
+        <!-- 👁️ 풍경 감상 전용 오버레이 & 힌트 -->
+        <div id="view-bg-overlay" onclick="restoreMenuFromScenery()"></div>
+        <div id="view-bg-hint" class="hidden">
+            화면 아무 곳이나 터치하면 원래 메뉴로 돌아갑니다 ↩️
+        </div>
+    </div>
+
+    <script>
+        let score = 0;
+        let timeLeft = 20;
+        let gameTimer = null;
+        let isPlaying = false;
+        const totalTrashCount = 10;
+
+        // 현재 감상 모드를 위해 임시로 숨겨둔 이전 모달 ID 저장용 변수
+        let activeModalIdBeforeViewing = null;
+
+        // --- Procedural Piano BGM Synth Engine (Web Audio API) ---
+        let bgmContext = null;
+        let bgmInterval = null;
+        let bgmMuted = false;
+        let bgmStep = 0;
+        
+        // 공간감 및 에코 효과 노드 (부드러운 울림)
+        let delayNode = null;
+        let feedbackGainNode = null;
+
+        // 템포가 많이 차분해지고 마디 사이에 여유 쉼표(null)가 있어 정신없지 않은 따뜻한 동요 피아노 멜로디
+        const melodyPattern = [
+            72, null, 76, null, 79, null, 76, null,
+            81, null, 79, null, 76, 74, 72, null,
+            76, null, 74, null, 72, null, 67, null,
+            72, 76, 79, 81, 84, null, 72, null
+        ];
+
+        // 아늑하고 통통 튀는 코드 반주 화음 레이어
+        const chordPattern = [
+            [48, 52, 55], [48, 52, 55], [43, 47, 50], [43, 47, 50],
+            [41, 45, 48], [41, 45, 48], [48, 52, 55], [48, 52, 55],
+            [48, 52, 55], [48, 52, 55], [43, 47, 50], [43, 47, 50],
+            [41, 45, 48], [43, 47, 50], [48, 52, 55], [48, 52, 55]
+        ];
+
+        function initBgmEngine() {
+            if (bgmContext) return;
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            if (AudioContext) {
+                bgmContext = new AudioContext();
+                
+                // 🎶 에코 딜레이 효과망 구축 (피아노 오디오에 리얼 잔향 부여)
+                delayNode = bgmContext.createDelay(1.0);
+                delayNode.delayTime.value = 0.35; // 차분한 박자에 맞춰 늘린 지연시간
+                
+                feedbackGainNode = bgmContext.createGain();
+                feedbackGainNode.gain.value = 0.35; // 차분함을 해치지 않도록 조절한 메아리 반향 강도
+                
+                // 딜레이 피드백 고리 생성
+                delayNode.connect(feedbackGainNode);
+                feedbackGainNode.connect(delayNode);
+                
+                // 마스터 출력 연결
+                delayNode.connect(bgmContext.destination);
+            }
+        }
+
+        // 게임 완료 시 기분을 설레게 만들어 주는 '샤라랑!✨' 요정 벨소리 연주 함수
+        function playSuccessChime() {
+            if (!bgmContext) return;
+            const now = bgmContext.currentTime;
+            
+            // 물결치듯 올라가는 맑고 깨끗한 아르페지오 고음 패널
+            const chimeNotes = [72, 76, 79, 84, 88, 91, 96]; 
+            chimeNotes.forEach((note, index) => {
+                const playTime = now + index * 0.06;
+                const freq = Math.pow(2, (note - 69) / 12) * 440;
+                
+                const osc = bgmContext.createOscillator();
+                const noteGain = bgmContext.createGain();
+                
+                osc.type = 'sine'; // 맑은 유리구슬 소리를 위해 Sine 파형 채택
+                osc.frequency.setValueAtTime(freq, playTime);
+                
+                noteGain.gain.setValueAtTime(0, playTime);
+                noteGain.gain.linearRampToValueAtTime(0.12, playTime + 0.02);
+                noteGain.gain.exponentialRampToValueAtTime(0.001, playTime + 0.4);
+                
+                osc.connect(noteGain);
+                
+                // 에코 효과 노드에도 연결하여 풍부한 울림 제공
+                if (delayNode) {
+                    noteGain.connect(delayNode);
+                }
+                noteGain.connect(bgmContext.destination);
+                
+                osc.start(playTime);
+                osc.stop(playTime + 0.45);
+            });
+        }
+
+        // 👏 로컬 및 모바일에서도 100% 작동하는 리얼한 입체 박수갈채 합성 알고리즘 (Web Audio API)
+        function playApplauseSound() {
+            if (!bgmContext) return;
+            const now = bgmContext.currentTime;
+
+            // 2초 길이의 순수 화이트 노이즈 버퍼 조립
+            const bufferSize = bgmContext.sampleRate * 2;
+            const buffer = bgmContext.createBuffer(1, bufferSize, bgmContext.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = Math.random() * 2 - 1;
+            }
+
+            // 여러 사람의 손뼉 소리를 공간감 있게 중첩시켜 화려한 피드백 제공 (총 35회의 박수 소리)
+            const totalClaps = 35;
+            for (let i = 0; i < totalClaps; i++) {
+                const startDelay = Math.random() * 1.5; // 1.5초 범위 내에 무작위 분포
+                const playTime = now + startDelay;
+
+                const noise = bgmContext.createBufferSource();
+                noise.buffer = buffer;
+
+                // 손뼉 특유의 텁텁하고 명쾌한 타격 소리를 만드는 대역통과 필터
+                const filter = bgmContext.createBiquadFilter();
+                filter.type = "bandpass";
+                // 주파수를 미세하게 흐트려 다른 성질의 손 크기 묘사
+                filter.frequency.setValueAtTime(900 + Math.random() * 600, playTime);
+                filter.Q.setValueAtTime(2.5, playTime);
+
+                const gainNode = bgmContext.createGain();
+                
+                // 손뼉이 마찰하는 극도로 빠르고 강한 어택(Attack)과 즉시 소멸하는 부드러운 감쇄(Decay) 설계
+                gainNode.gain.setValueAtTime(0, playTime);
+                gainNode.gain.linearRampToValueAtTime(0.12 + Math.random() * 0.1, playTime + 0.004); // 순간 타격음
+                gainNode.gain.exponentialRampToValueAtTime(0.001, playTime + 0.05 + Math.random() * 0.04); // 빠른 소멸
+
+                noise.connect(filter);
+                filter.connect(gainNode);
+
+                // 공간 울림 에코 필터망에 연결하여 풍성함 배가
+                if (delayNode) {
+                    gainNode.connect(delayNode);
+                }
+                gainNode.connect(bgmContext.destination);
+
+                noise.start(playTime);
+                noise.stop(playTime + 0.15);
+            }
+        }
+
+        function startBgmMelody() {
+            initBgmEngine();
+            if (!bgmContext) return;
+            
+            if (bgmContext.state === 'suspended') {
+                bgmContext.resume();
+            }
+
+            if (bgmInterval) clearInterval(bgmInterval);
+            bgmStep = 0;
+
+            // 기존 350ms -> 580ms로 늦춰 음악을 매우 차분하고 편안한 바운스로 변환
+            bgmInterval = setInterval(() => {
+                if (bgmMuted || !isPlaying) return;
+
+                const now = bgmContext.currentTime;
+                const midiNote = melodyPattern[bgmStep % melodyPattern.length];
+                
+                // 1. 메인 멜로디 연주
+                if (midiNote !== null) {
+                    playPianoNote(midiNote, now, 0.5, false);
+                }
+
+                // 2. 부드러운 코드 반주 (2비트 마다 잔잔히 보충)
+                if (bgmStep % 2 === 0) {
+                    const chord = chordPattern[Math.floor(bgmStep / 2) % chordPattern.length];
+                    if (chord) {
+                        chord.forEach(note => {
+                            playPianoNote(note, now, 0.7, true);
+                        });
+                    }
+                }
+
+                bgmStep++;
+            }, 580);
+        }
+
+        // 차분하고 명료한 오르골 건반소리를 합성하는 물리 모델링 필터
+        function playPianoNote(midiNote, startTime, duration, isChord = false) {
+            if (!bgmContext || bgmMuted) return;
+            const freq = Math.pow(2, (midiNote - 69) / 12) * 440;
+
+            const osc1 = bgmContext.createOscillator();
+            osc1.type = 'triangle'; // 따뜻한 터치감
+            osc1.frequency.setValueAtTime(freq, startTime);
+
+            const osc2 = bgmContext.createOscillator();
+            osc2.type = 'sine'; // 맑고 통통 튀는 하모닉스 배음 광택 효과
+            osc2.frequency.setValueAtTime(freq * 2, startTime);
+
+            const noteGain = bgmContext.createGain();
+            const volume = isChord ? 0.025 : 0.085; // 배경음악 소리를 자극적이지 않게 살짝 하향
+
+            // 어택을 극도로 당기고(0.01초) 빠르게 감쇄하여 통통 튀는 탄력을 부여함
+            noteGain.gain.setValueAtTime(0, startTime);
+            noteGain.gain.linearRampToValueAtTime(volume, startTime + 0.012); // 예리한 Pluck 어택
+            noteGain.gain.exponentialRampToValueAtTime(volume * 0.3, startTime + 0.09); // 빠르게 감쇄(통통)
+            noteGain.gain.exponentialRampToValueAtTime(0.001, startTime + duration); // 따뜻하고 가벼운 릴리즈
+
+            osc1.connect(noteGain);
+            osc2.connect(noteGain);
+            
+            // 딜레이 에코 연결
+            if (delayNode) {
+                noteGain.connect(delayNode);
+            }
+            noteGain.connect(bgmContext.destination);
+
+            osc1.start(startTime);
+            osc2.start(startTime);
+            osc1.stop(startTime + duration);
+            osc2.stop(startTime + duration);
+        }
+
+        // 배경음악 제어 기능
+        function toggleBgm() {
+            bgmMuted = !bgmMuted;
+            const icon = document.getElementById('bgm-icon');
+            if (bgmMuted) {
+                icon.innerText = "🔇 MUTED";
+                icon.parentElement.style.borderColor = "#fecdd3";
+                icon.parentElement.style.color = "#9f1239";
+            } else {
+                icon.innerText = "🎵 ON";
+                icon.parentElement.style.borderColor = "#bfdbfe";
+                icon.parentElement.style.color = "#1d4ed8";
+                initBgmEngine();
+                if (bgmContext && bgmContext.state === 'suspended') {
+                    bgmContext.resume();
+                }
+            }
+        }
+
+        // --- 풍경 감상 모드 관련 제어 함수 ---
+        function hideMenuToViewScenery(modalId) {
+            activeModalIdBeforeViewing = modalId;
+            
+            // 활성 모달 창 부드럽게 감춤
+            const activeModal = document.getElementById(modalId);
+            if (activeModal) {
+                activeModal.classList.add('fade-out');
+            }
+            
+            // 풍경 감상 전용 오버레이 및 안내 문구 노출
+            document.getElementById('view-bg-overlay').style.display = 'block';
+            document.getElementById('view-bg-hint').classList.remove('hidden');
+        }
+
+        function restoreMenuFromScenery() {
+            if (!activeModalIdBeforeViewing) return;
+            
+            // 감춰진 모달 복구
+            const activeModal = document.getElementById(activeModalIdBeforeViewing);
+            if (activeModal) {
+                activeModal.classList.remove('fade-out');
+            }
+            
+            // 풍경 감상 오버레이 및 안내 문구 숨김
+            document.getElementById('view-bg-overlay').style.display = 'none';
+            document.getElementById('view-bg-hint').classList.add('hidden');
+            
+            activeModalIdBeforeViewing = null;
+        }
+
+        // --- 사실적인 입체 무표정 SVG 쓰레기 에셋 ---
+        const trashSVGs = {
+            bottle: `
+                <svg viewBox="0 0 100 100" width="70" height="70">
+                    <defs>
+                        <linearGradient id="bottleGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                            <stop offset="0%" stop-color="#e0f2fe" stop-opacity="0.9"/>
+                            <stop offset="30%" stop-color="#bae6fd" stop-opacity="0.7"/>
+                            <stop offset="70%" stop-color="#e0f2fe" stop-opacity="0.6"/>
+                            <stop offset="100%" stop-color="#bae6fd" stop-opacity="0.9"/>
+                        </linearGradient>
+                        <linearGradient id="labelGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="0%" stop-color="#0284c7"/>
+                            <stop offset="100%" stop-color="#0369a1"/>
+                        </linearGradient>
+                    </defs>
+                    <rect x="42" y="15" width="16" height="10" fill="url(#bottleGrad)" stroke="#0284c7" stroke-width="1.5"/>
+                    <rect x="40" y="8" width="20" height="8" rx="1.5" fill="#0284c7"/>
+                    <line x1="44" y1="8" x2="44" y2="16" stroke="#0369a1" stroke-width="1"/>
+                    <line x1="48" y1="8" x2="48" y2="16" stroke="#0369a1" stroke-width="1"/>
+                    <line x1="52" y1="8" x2="52" y2="16" stroke="#0369a1" stroke-width="1"/>
+                    <line x1="56" y1="8" x2="56" y2="16" stroke="#0369a1" stroke-width="1"/>
+                    <path d="M 42,25 C 32,28 30,35 30,45 L 30,82 C 30,88 35,92 42,92 L 58,92 C 65,92 70,88 70,82 L 70,45 C 70,35 68,28 58,25 Z" fill="url(#bottleGrad)" stroke="#0284c7" stroke-width="2"/>
+                    <path d="M 32,38 Q 50,41 68,38" stroke="#0284c7" stroke-width="1.5" fill="none" opacity="0.4"/>
+                    <path d="M 30,72 Q 50,75 70,72" stroke="#0284c7" stroke-width="1.5" fill="none" opacity="0.4"/>
+                    <path d="M 30,78 Q 50,81 70,78" stroke="#0284c7" stroke-width="1.5" fill="none" opacity="0.4"/>
+                    <path d="M 30,65 Q 50,67 70,65 L 70,82 C 70,88 65,92 58,92 L 42,92 C 35,92 30,88 30,82 Z" fill="#38bdf8" opacity="0.35"/>
+                    <path d="M 30,46 L 70,46 L 70,64 L 30,64 Z" fill="url(#labelGrad)"/>
+                    <path d="M 30,58 Q 40,52 50,58 T 70,58 L 70,64 L 30,64 Z" fill="#22c55e" opacity="0.6"/>
+                    <path d="M 30,60 Q 42,56 52,61 T 70,60 L 70,64 L 30,64 Z" fill="#ffffff" opacity="0.8"/>
+                    <rect x="34" y="49" width="2" height="6" fill="#ffffff"/>
+                    <rect x="38" y="49" width="1" height="6" fill="#ffffff"/>
+                    <rect x="40" y="49" width="3" height="6" fill="#ffffff"/>
+                </svg>
+            `,
+            bag: `
+                <svg viewBox="0 0 100 100" width="70" height="70">
+                    <defs>
+                        <linearGradient id="bagGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stop-color="#4b5563"/>
+                            <stop offset="40%" stop-color="#1f2937"/>
+                            <stop offset="80%" stop-color="#111827"/>
+                            <stop offset="100%" stop-color="#030712"/>
+                        </linearGradient>
+                        <linearGradient id="highlightGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="0%" stop-color="#ffffff" stop-opacity="0.45"/>
+                            <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+                        </linearGradient>
+                    </defs>
+                    <path d="M 32,25 C 22,8 35,5 42,18 C 45,22 48,22 50,18 C 58,5 71,8 61,25 Z" fill="url(#bagGrad)" stroke="#111827" stroke-width="2"/>
+                    <ellipse cx="46" cy="22" rx="6" ry="4" fill="#111827"/>
+                    <path d="M 22,32 C 15,38 18,55 15,70 C 12,82 20,94 46,94 C 72,94 80,82 77,70 Q 74,55 77,38 C 74,55 77,38 70,32 C 60,38 52,35 46,35 C 40,35 32,38 22,32 Z" fill="url(#bagGrad)" stroke="#111827" stroke-width="2" stroke-linejoin="round"/>
+                    <path d="M 25,40 Q 32,55 22,75" stroke="url(#highlightGrad)" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+                    <path d="M 55,38 Q 62,50 68,78" stroke="url(#highlightGrad)" stroke-width="2" fill="none" stroke-linecap="round"/>
+                    <path d="M 38,45 Q 48,55 42,85" stroke="url(#highlightGrad)" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+                    <path d="M 20,48 Q 30,52 35,60" stroke="#030712" stroke-width="2" fill="none" stroke-linecap="round" opacity="0.6"/>
+                    <path d="M 68,52 Q 60,60 55,75" stroke="#030712" stroke-width="2" fill="none" stroke-linecap="round" opacity="0.6"/>
+                    <path d="M 35,85 Q 46,80 60,83" stroke="#030712" stroke-width="1.5" fill="none" stroke-linecap="round" opacity="0.6"/>
+                </svg>
+            `,
+            box: `
+                <svg viewBox="0 0 100 100" width="75" height="75">
+                    <defs>
+                        <linearGradient id="boxFront" x1="0%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="0%" stop-color="#d97706"/>
+                            <stop offset="100%" stop-color="#b45309"/>
+                        </linearGradient>
+                        <linearGradient id="boxSide" x1="0%" y1="0%" x2="100%" y2="0%">
+                            <stop offset="0%" stop-color="#b45309"/>
+                            <stop offset="100%" stop-color="#78350f"/>
+                        </linearGradient>
+                        <linearGradient id="boxTop" x1="0%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="0%" stop-color="#f59e0b"/>
+                            <stop offset="100%" stop-color="#d97706"/>
+                        </linearGradient>
+                    </defs>
+                    <path d="M 50,15 L 85,28 L 50,42 L 15,28 Z" fill="url(#boxTop)" stroke="#78350f" stroke-width="2" stroke-linejoin="round"/>
+                    <path d="M 15,28 L 50,42 L 50,85 L 15,70 Z" fill="url(#boxFront)" stroke="#78350f" stroke-width="2" stroke-linejoin="round"/>
+                    <path d="M 50,42 L 85,28 L 85,70 L 50,85 Z" fill="url(#boxSide)" stroke="#78350f" stroke-width="2" stroke-linejoin="round"/>
+                    <path d="M 45,17 L 78,30 L 45,43 L 15,31 Z" fill="#b45309" opacity="0.35"/>
+                    <path d="M 47,16 L 81,29" stroke="#92400e" stroke-width="5" opacity="0.85" stroke-linecap="round"/>
+                    <path d="M 50,42 L 50,85" stroke="#92400e" stroke-width="5" opacity="0.85" stroke-linecap="round"/>
+                    <path d="M 55,48 L 75,40 L 75,60 L 55,68 Z" fill="#ffffff" stroke="#78350f" stroke-width="1" stroke-linejoin="round"/>
+                    <line x1="59" y1="48" x2="59" y2="56" stroke="#1f2937" stroke-width="1.5"/>
+                    <line x1="62" y1="47" x2="62" y2="55" stroke="#1f2937" stroke-width="1"/>
+                    <line x1="64" y1="46" x2="64" y2="54" stroke="#1f2937" stroke-width="2"/>
+                    <line x1="68" y1="45" x2="68" y2="53" stroke="#1f2937" stroke-width="1"/>
+                    <line x1="71" y1="44" x2="71" y2="52" stroke="#1f2937" stroke-width="1.5"/>
+                    <line x1="58" y1="59" x2="70" y2="54" stroke="#4b5563" stroke-width="1.5"/>
+                    <line x1="58" y1="62" x2="66" y2="59" stroke="#4b5563" stroke-width="1.5"/>
+                </svg>
+            `
+        };
+
+        const trashTypes = ['bottle', 'bag', 'box'];
+
+        // 배경 수동 선택 기능 처리 함수 (시작 모달 & 종료 모달 동시 지원 + 미리보기 프레임 즉각 반영)
+        function handleBackgroundUpload(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const uploadedUrl = `url('${e.target.result}')`;
+                    
+                    // 1. 실제 게임 백그라운드 교체
+                    document.getElementById('game-board').style.backgroundImage = uploadedUrl;
+                    
+                    // 2. 시작 전 모달 미리보기 프레임 실시간 교체
+                    const startPreview = document.getElementById('modal-bg-preview-start');
+                    if (startPreview) {
+                        startPreview.style.backgroundImage = uploadedUrl;
+                    }
+
+                    // 3. 게임 완료 후 모달 미리보기 프레임 실시간 교체
+                    const endPreview = document.getElementById('modal-bg-preview-end');
+                    if (endPreview) {
+                        endPreview.style.backgroundImage = uploadedUrl;
+                    }
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        // Web Audio API 기반 "쏙!" 수거 터치 피드백 사운드
+        function playSsokSound() {
+            try {
+                initBgmEngine();
+                if (!bgmContext) return;
+                const osc = bgmContext.createOscillator();
+                const gain = bgmContext.createGain();
+                
+                osc.connect(gain);
+                gain.connect(bgmContext.destination);
+                
+                osc.type = 'sine';
+                const now = bgmContext.currentTime;
+                
+                osc.frequency.setValueAtTime(320, now);
+                osc.frequency.exponentialRampToValueAtTime(1300, now + 0.12);
+                
+                gain.gain.setValueAtTime(0.35, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+                
+                osc.start(now);
+                osc.stop(now + 0.14);
+            } catch (e) {
+                console.log(e);
+            }
+        }
+
+        // 쓰레기 랜덤 배치 기능 (모든 쓰레기를 하단 영역에만 생성되도록 좌표 범위 조정)
+        function spawnTrashItems() {
+            const container = document.getElementById('trash-container');
+            container.innerHTML = '';
+
+            for (let i = 0; i < totalTrashCount; i++) {
+                const trashNode = document.createElement('div');
+                trashNode.className = `trash-item rot-${Math.floor(Math.random() * 4) + 1}`;
+                
+                const randomType = trashTypes[Math.floor(Math.random() * trashTypes.length)];
+                trashNode.innerHTML = trashSVGs[randomType];
+
+                // 아이들의 손이 닿기 편리하도록 세로 위치를 화면 하단 영역(58% ~ 82%)으로 고정합니다.
+                // 쓰레기통(오른쪽 하단)에 겹쳐서 가려지는 현상을 피하기 위해 가로 위치는 10% ~ 70% 사이로 제한합니다.
+                const leftPos = 10 + Math.random() * 60; 
+                const topPos = 58 + Math.random() * 24; 
+
+                trashNode.style.left = `${leftPos}%`;
+                trashNode.style.top = `${topPos}%`;
+
+                trashNode.addEventListener('mousedown', (e) => handleTrashClick(e, trashNode));
+                trashNode.addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    handleTrashClick(e, trashNode);
+                }, { passive: false });
+
+                container.appendChild(trashNode);
+            }
+        }
+
+        // 터치 및 수거 연출
+        function handleTrashClick(event, element) {
+            if (!isPlaying || element.classList.contains('flying')) return;
+
+            playSsokSound();
+
+            const trashCan = document.getElementById('trash-can');
+            const canRect = trashCan.getBoundingClientRect();
+            const boardRect = document.getElementById('game-board').getBoundingClientRect();
+
+            const targetX = canRect.left - boardRect.left + canRect.width / 2 - 35;
+            const targetY = canRect.top - boardRect.top + canRect.height / 2 - 35;
+
+            element.style.setProperty('--target-x', `${targetX}px`);
+            element.style.setProperty('--target-y', `${targetY}px`);
+            element.classList.add('flying');
+
+            trashCan.classList.add('trash-can-bounce');
+            setTimeout(() => {
+                trashCan.classList.remove('trash-can-bounce');
+            }, 250);
+
+            score++;
+            document.getElementById('score-val').innerText = score;
+
+            setTimeout(() => {
+                element.remove();
+            }, 600);
+
+            if (score === totalTrashCount) {
+                finishGame(true);
+            }
+        }
+
+        // 게임 준비 및 즉시 시작
+        function initAndStartGame() {
+            initBgmEngine();
+
+            document.getElementById('start-modal').classList.add('hidden');
+            document.getElementById('end-modal').classList.add('hidden');
+
+            score = 0;
+            timeLeft = 20;
+            isPlaying = true;
+
+            document.getElementById('score-val').innerText = score;
+            document.getElementById('time-left').innerText = timeLeft;
+
+            spawnTrashItems();
+            startBgmMelody(); // 통통 튀는 차분한 피아노 BGM 가동
+
+            if (gameTimer) clearInterval(gameTimer);
+            gameTimer = setInterval(() => {
+                timeLeft--;
+                document.getElementById('time-left').innerText = timeLeft;
+
+                if (timeLeft <= 0) {
+                    finishGame(false);
+                }
+            }, 1000);
+        }
+
+        // 게임 엔드 판정
+        function finishGame(isSuccess) {
+            isPlaying = false;
+            clearInterval(gameTimer);
+
+            const endModal = document.getElementById('end-modal');
+            const endTitle = document.getElementById('end-title');
+            const endDesc = document.getElementById('end-desc');
+
+            if (isSuccess) {
+                endTitle.innerHTML = "참 잘했어요! 🏆";
+                // 요청하신 '놀이터'를 '우리동네'로 변경 적용 완료!
+                endDesc.innerHTML = "우리동네의 모든 쓰레기를 다 주웠어요!<br>우리동네가 깨끗해져서 친구들이 기뻐해요!";
+                
+                // 마법의 요정 아르페지오 벨소리 & 👏 리얼한 가상 박수갈채 사운드만 재생
+                playSuccessChime();
+                playApplauseSound();
+            } else {
+                endTitle.innerHTML = "조금 아쉬워요! ⏱️";
+                endDesc.innerHTML = "시간이 모두 끝났어요!<br>우리 다시 한 번 찾아볼까요?";
+            }
+
+            endModal.classList.remove('hidden');
+        }
+
+        // 첫 가동 시 효과음 합성 엔진용 기초 설정 활성화
+        window.addEventListener('DOMContentLoaded', () => {
+            initBgmEngine();
+        });
+    </script>
+</body>
+</html>
